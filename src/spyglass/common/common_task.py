@@ -215,9 +215,9 @@ class TaskEpoch(SpyglassIngestion, dj.Imported):
         camera_names = dict()
 
         for device in nwb_file.devices.values():
-            if is_nwb_obj_type(device, "CameraDevice"):
-                camera_id = int(str.split(device.name)[1])
-                camera_names[camera_id] = device.camera_name
+            if CameraDevice.is_camera_device(device):
+                camera_id = CameraDevice.get_camera_id(device)
+                camera_names[camera_id] = CameraDevice.get_camera_name(device)
 
         # Config entries are scalar per device: {camera_id: int,
         # camera_name: str}. The previous implementation zipped the two, which

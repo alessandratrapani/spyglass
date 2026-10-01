@@ -630,7 +630,7 @@ class VideoFile(SpyglassIngestion, dj.Imported):
             If camera_name is not found in CameraDevice table
         """
         nwb_cam_device = video_obj.device.name
-        camera_name = video_obj.device.camera_name
+        camera_name = CameraDevice.get_camera_name(video_obj.device)
 
         if not (CameraDevice & {"camera_name": camera_name}):
             raise KeyError(
@@ -638,16 +638,23 @@ class VideoFile(SpyglassIngestion, dj.Imported):
                 "in CameraDevice table."
             )
 
+        # "camera_device N" (ndx-franklab-novela convention), else the camera id
+        # parsed from the device name (e.g. ndx-pose CalibratedCamera "Camera1").
         match = re.match(cam_device_regex, nwb_cam_device)
-        if not match:
+        video_file_num = (
+            int(match[1])
+            if match
+            else CameraDevice.get_camera_id(video_obj.device)
+        )
+        if video_file_num < 0:
             raise ValueError(
                 f"Camera device name '{nwb_cam_device}' does not match "
-                f"expected pattern '{cam_device_regex}'"
+                f"expected pattern '{cam_device_regex}' and has no integer id"
             )
 
         return dict(
             key,
-            video_file_num=int(match[1]),
+            video_file_num=video_file_num,
             camera_name=camera_name,
             video_file_object_id=video_obj.object_id,
         )

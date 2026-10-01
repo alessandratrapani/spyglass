@@ -327,12 +327,20 @@ class CameraDevice(SpyglassIngestion, dj.Manual):
                 "meters_per_pixel": ("meters_per_pixel", 0),
                 "lens": ("lens", ""),
                 "camera_id": self.get_camera_id,
-            },
-            "model": {
-                "model": "name",
-                "manufacturer": "manufacturer",
+                # device.model (a DeviceModel) is optional, e.g. a
+                # CalibratedCamera written without one; default to "".
+                "model": lambda obj: self._model_attr(obj, "name"),
+                "manufacturer": lambda obj: self._model_attr(
+                    obj, "manufacturer"
+                ),
             },
         }
+
+    @staticmethod
+    def _model_attr(camera_nwb_obj, attr: str) -> str:
+        """An attribute of the device's DeviceModel, or "" if it has none."""
+        model = getattr(camera_nwb_obj, "model", None)
+        return (getattr(model, attr, None) or "") if model is not None else ""
 
     @classmethod
     def is_camera_device(cls, nwb_obj) -> bool:

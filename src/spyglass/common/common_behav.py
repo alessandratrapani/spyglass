@@ -659,6 +659,20 @@ class VideoFile(SpyglassIngestion, dj.Imported):
             video_file_object_id=video_obj.object_id,
         )
 
+    @staticmethod
+    def _video_timestamps(video_obj):
+        """Frame times of an ImageSeries, explicit or from starting_time/rate.
+
+        ``get_timestamps()`` can't be used for rate-based external-file
+        ImageSeries: their ``data`` is empty, so it returns no samples. The
+        frame count comes from ``num_samples`` instead.
+        """
+        if video_obj.timestamps is not None:
+            return video_obj.timestamps
+        return video_obj.starting_time + (
+            np.arange(video_obj.num_samples) / video_obj.rate
+        )
+
     def _validate_video_timestamps(self, video_obj, valid_times, key):
         """Validate video timestamps and return entries or failure reason.
 
@@ -681,7 +695,7 @@ class VideoFile(SpyglassIngestion, dj.Imported):
             - If validation passes: ([entry_dicts], None, overlap_percent)
             - If validation fails: ([], "failure reason string", overlap_percent)
         """
-        timestamps = video_obj.timestamps
+        timestamps = self._video_timestamps(video_obj)
         starting_frame = getattr(video_obj, "starting_frame", None)
 
         # Multi-file ImageSeries

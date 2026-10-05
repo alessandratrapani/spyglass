@@ -246,9 +246,7 @@ class ImportedMultiCameraPose(SpyglassIngestion, dj.Manual):
                 "nwb_file_name": nwb_file_name,
                 "camera_name": CameraDevice.get_camera_name(device),
             }
-            if len(video_key) != 1 or not (
-                CameraCalibration & calibration_key
-            ):
+            if len(video_key) != 1 or not (CameraCalibration & calibration_key):
                 logger.warning(
                     f"{nwb_file_name}: no VideoFile or CameraCalibration for "
                     f"{camera_pose.name}; skipped."
@@ -306,7 +304,10 @@ class ImportedMultiCameraPose(SpyglassIngestion, dj.Manual):
         return {
             camera_name: (
                 CameraCalibration
-                & {"nwb_file_name": key["nwb_file_name"], "camera_name": camera_name}
+                & {
+                    "nwb_file_name": key["nwb_file_name"],
+                    "camera_name": camera_name,
+                }
             ).fetch_calibration()
             for camera_name in (self.Camera & key).fetch("camera_name")
         }
@@ -327,7 +328,9 @@ class ImportedMultiCameraPose(SpyglassIngestion, dj.Manual):
         }
         return {
             row["camera_name"]: str(
-                by_object_id[row["camera_pose_object_id"]].source_video.external_file[0]
+                by_object_id[
+                    row["camera_pose_object_id"]
+                ].source_video.external_file[0]
             )
             for row in cameras
         }

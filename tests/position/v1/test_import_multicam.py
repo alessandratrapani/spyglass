@@ -57,10 +57,14 @@ def multicam_nwb(verbose_context):
         identifier="test_multicam_pose",
         session_start_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )
-    subject = Subject(subject_id="test_multicam_subject", species="Rattus norvegicus")
+    subject = Subject(
+        subject_id="test_multicam_subject", species="Rattus norvegicus"
+    )
     nwbfile.subject = subject
 
-    camera_model = DeviceModel(name="test camera model", manufacturer="test maker")
+    camera_model = DeviceModel(
+        name="test camera model", manufacturer="test maker"
+    )
     nwbfile.add_device_model(camera_model)
     cameras, videos, camera_poses = {}, {}, []
     for i, name in enumerate(CAMERAS):
@@ -95,7 +99,9 @@ def multicam_nwb(verbose_context):
             )
         )
 
-    skeleton = Skeleton(name="skeleton", nodes=list(NODES), edges=[[0, 1]], subject=subject)
+    skeleton = Skeleton(
+        name="skeleton", nodes=list(NODES), edges=[[0, 1]], subject=subject
+    )
     data = rng.random((N_FRAMES, 3))
     confidence = rng.random(N_FRAMES)
     series = [
@@ -150,7 +156,9 @@ def multicam_nwb(verbose_context):
 
 @pytest.fixture(scope="module")
 def multicam_pose(multicam_nwb):
-    from spyglass.position.v1.imported_multicam_pose import ImportedMultiCameraPose
+    from spyglass.position.v1.imported_multicam_pose import (
+        ImportedMultiCameraPose,
+    )
 
     return ImportedMultiCameraPose & multicam_nwb["key"]
 
@@ -177,28 +185,38 @@ def test_default_epoch(common, multicam_nwb):
     epoch = (common.TaskEpoch & key).fetch1()
     assert epoch["task_name"] == "default"
     assert epoch["interval_list_name"] == "01_default"
-    assert sorted(c["camera_name"] for c in epoch["camera_names"]) == list(CAMERAS)
+    assert sorted(c["camera_name"] for c in epoch["camera_names"]) == list(
+        CAMERAS
+    )
 
     valid_times = (
         common.IntervalList & key & {"interval_list_name": "01_default"}
     ).fetch1("valid_times")
     np.testing.assert_allclose(valid_times, [[0.0, (N_FRAMES - 1) / RATE]])
 
-    videos = (common.VideoFile & key).fetch("camera_name", order_by="video_file_num")
+    videos = (common.VideoFile & key).fetch(
+        "camera_name", order_by="video_file_num"
+    )
     assert list(videos) == list(CAMERAS)
 
 
 def test_multicam_pose_entries(multicam_pose):
-    from spyglass.position.v1.imported_multicam_pose import ImportedMultiCameraPose
+    from spyglass.position.v1.imported_multicam_pose import (
+        ImportedMultiCameraPose,
+    )
 
     entry = multicam_pose.fetch1()
     assert entry["pose_estimation_name"] == "PoseEstimation3D"
     assert entry["source_software"] == "DANNCE"
     assert entry["source_software_version"] == "1.0"
     assert entry["scorer"] == "test scorer"
-    assert entry["interval_list_name"] == "pose_PoseEstimation3D_valid_intervals"
+    assert (
+        entry["interval_list_name"] == "pose_PoseEstimation3D_valid_intervals"
+    )
 
-    parts = (ImportedMultiCameraPose.BodyPart & multicam_pose).fetch("part_name")
+    parts = (ImportedMultiCameraPose.BodyPart & multicam_pose).fetch(
+        "part_name"
+    )
     assert sorted(parts) == sorted(f"PoseEstimationSeries{n}" for n in NODES)
 
     # Each camera links the video and the calibration of the same camera
@@ -222,7 +240,9 @@ def test_fetch_pose_dataframe(multicam_nwb, multicam_pose):
     np.testing.assert_allclose(df.index, np.arange(N_FRAMES) / RATE)
     snout = df["PoseEstimationSeriesSnout"]
     np.testing.assert_array_equal(snout[["x", "y", "z"]], multicam_nwb["data"])
-    np.testing.assert_array_equal(snout["likelihood"], multicam_nwb["confidence"])
+    np.testing.assert_array_equal(
+        snout["likelihood"], multicam_nwb["confidence"]
+    )
 
 
 def test_fetch_skeleton_calibrations_videos(multicam_pose):

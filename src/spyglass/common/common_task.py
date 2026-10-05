@@ -142,7 +142,9 @@ class TaskEpoch(SpyglassIngestion, dj.Imported):
     _file_config = dict()  # config for the file being ingested
     _camera_cache = dict()  # nwb_file_name -> {camera id: camera name}
     _interval_cache = dict()  # nwb_file_name -> interval names in IntervalList
-    _default_epoch = None  # (start, stop, camera names) for a file without tasks
+    _default_epoch = (
+        None  # (start, stop, camera names) for a file without tasks
+    )
 
     # A file with videos but no task metadata (no processing["tasks"], no config
     # Tasks) gets one default epoch spanning its videos, so VideoFile can still

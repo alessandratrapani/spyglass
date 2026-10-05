@@ -350,7 +350,9 @@ class CameraDevice(SpyglassIngestion, dj.Manual):
     @staticmethod
     def get_camera_name(camera_nwb_obj) -> str:
         """The device's camera_name if it has one, else its NWB name."""
-        return getattr(camera_nwb_obj, "camera_name", None) or camera_nwb_obj.name
+        return (
+            getattr(camera_nwb_obj, "camera_name", None) or camera_nwb_obj.name
+        )
 
     @staticmethod
     def get_camera_id(camera_nwb_obj: ndx_franklab_novela.CameraDevice) -> int:

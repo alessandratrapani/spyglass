@@ -106,9 +106,7 @@ def test_insert_sample_count(mini_insert, mini_content, mini_restr, common):
 
 def test_insert_dio(mini_insert, mini_behavior, mini_restr, common):
     events_data = (common.DIOEvents & mini_restr).fetch(as_dict=True)
-    events_raw = mini_behavior.get_data_interface(
-        "behavioral_events"
-    ).time_series
+    events_raw = mini_behavior["behavioral_events"].time_series
 
     assert len(events_data) == len(events_raw), "Number of events not match"
 
@@ -131,7 +129,7 @@ def test_insert_pos(
     mini_pos_tbl,
 ):
     pos_data = (common.PositionSource.SpatialSeries & mini_restr).fetch()
-    pos_raw = mini_behavior.get_data_interface("position").spatial_series
+    pos_raw = mini_behavior["position"].spatial_series
 
     assert len(pos_data) == len(pos_raw), "Number of spatial series not match"
 

@@ -31,7 +31,7 @@ def mini_behavior(mini_content):
 
 @pytest.fixture(scope="session")
 def mini_pos(mini_behavior):
-    yield mini_behavior.get_data_interface("position").spatial_series
+    yield mini_behavior["position"].spatial_series
 
 
 @pytest.fixture(scope="session")
@@ -41,7 +41,7 @@ def mini_pos_series(mini_pos):
 
 @pytest.fixture(scope="session")
 def mini_beh_events(mini_behavior):
-    yield mini_behavior.get_data_interface("behavioral_events")
+    yield mini_behavior["behavioral_events"]
 
 
 @pytest.fixture(scope="session")

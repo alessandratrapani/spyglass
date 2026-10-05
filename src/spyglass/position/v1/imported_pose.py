@@ -18,14 +18,14 @@ schema = dj.schema("position_v1_imported_pose")
 class ImportedPose(SpyglassIngestion, dj.Manual):
     """
     Table to ingest pose data generated prior to spyglass.
-    Each entry corresponds to one ndx_pose.PoseEstimation object, or (ndx-pose
-    >= 0.4.0) one MultiCameraPoseEstimation object, in an NWB file.
+    Each entry corresponds to on ndx_pose.PoseEstimation object in an NWB file.
     PoseEstimation objects should be stored in nwb.processing.behavior
     Assumptions:
     - Single skeleton object per PoseEstimation object
-    - PoseEstimation objects without series are skipped (e.g. the per-camera
-      children of a MultiCameraPoseEstimation, which only link a camera and
-      its source video)
+    - PoseEstimation objects without series are skipped: these are the
+      per-camera children of an ndx-pose MultiCameraPoseEstimation, which
+      only link a camera and its video. Multi-camera pose is ingested by
+      ImportedMultiCameraPose.
     """
 
     _nwb_table = Nwbfile
@@ -55,20 +55,11 @@ class ImportedPose(SpyglassIngestion, dj.Manual):
     }
 
     def get_nwb_objects(self, nwb_file, nwb_file_name=None):
-        """Pose containers holding at least one PoseEstimationSeries.
-
-        Includes MultiCameraPoseEstimation (ndx-pose >= 0.4.0), which is not a
-        PoseEstimation subclass, and skips series-less PoseEstimation objects.
-        """
-        pose_types = (ndx_pose.PoseEstimation,) + tuple(
-            t
-            for t in (getattr(ndx_pose, "MultiCameraPoseEstimation", None),)
-            if t is not None
-        )
+        """PoseEstimation objects holding at least one PoseEstimationSeries."""
         return [
             obj
-            for obj in nwb_file.objects.values()
-            if isinstance(obj, pose_types) and len(obj.pose_estimation_series)
+            for obj in super().get_nwb_objects(nwb_file, nwb_file_name)
+            if len(obj.pose_estimation_series)
         ]
 
     def generate_entries_from_nwb_object(self, nwb_obj, base_key=None):
@@ -152,18 +143,13 @@ class ImportedPose(SpyglassIngestion, dj.Manual):
         body_parts = list(pose_estimations.keys())
         index = pose_estimations[body_parts[0]].get_timestamps()
         for body_part in body_parts:
-            series = pose_estimations[body_part]
-            bp_data = series.data
+            bp_data = pose_estimations[body_part].data
             part_df = {
                 "video_frame_ind": np.nan,
                 "x": bp_data[:, 0],
                 "y": bp_data[:, 1],
+                "likelihood": pose_estimations[body_part].confidence[:],
             }
-            if bp_data.ndim == 2 and bp_data.shape[1] == 3:  # 3D pose
-                part_df["z"] = bp_data[:, 2]
-            part_df["likelihood"] = (
-                series.confidence[:] if series.confidence is not None else np.nan
-            )
 
             pose_df[body_part] = pd.DataFrame(part_df, index=index)
 

@@ -30,6 +30,8 @@ class ImportedEvents(SpyglassIngestion, dj.Manual):
     # FKs -> Session, not -> Nwbfile, so point fetch_nwb() at the file table.
     _nwb_table = Nwbfile
     _source_nwb_object_type = "EventsTable"
+    # One entry per EventsTable, not one per event (row).
+    _single_entry_per_table = True
 
     table_key_to_obj_attr = {
         "self": {
@@ -43,4 +45,5 @@ class ImportedEvents(SpyglassIngestion, dj.Manual):
     def fetch1_dataframe(self):
         """The events of one EventsTable as a DataFrame, one row per event."""
         key = self.fetch1("KEY")  # enforce exactly one row
-        return (self & key).fetch_nwb()[0]["events"].to_dataframe()
+        # fetch_nwb() already returns a DynamicTable as a DataFrame
+        return (self & key).fetch_nwb()[0]["events"]

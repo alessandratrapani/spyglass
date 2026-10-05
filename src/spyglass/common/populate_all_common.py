@@ -19,6 +19,7 @@ from spyglass.common.common_device import (
     ProbeType,
 )
 from spyglass.common.common_dio import DIOEvents
+from spyglass.common.common_events import ImportedEvents
 from spyglass.common.common_ephys import (
     Electrode,
     ElectrodeGroup,
@@ -194,6 +195,7 @@ def populate_all_common(
             Raw,  # Depends on Session
             SampleCount,  # Depends on Session
             DIOEvents,  # Depends on Session
+            ImportedEvents,  # Depends on Session
             ImportedSpikeSorting,  # Depends on Session
             SensorData,  # Depends on Session
             IntervalList,  # Depends on Session

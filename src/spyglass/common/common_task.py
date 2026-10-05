@@ -1,4 +1,5 @@
 import datajoint as dj
+import numpy as np
 import pynwb
 
 from spyglass.common.common_device import CameraDevice  # noqa: F401
@@ -7,7 +8,11 @@ from spyglass.common.common_nwbfile import Nwbfile
 from spyglass.common.common_session import Session  # noqa: F401
 from spyglass.utils import SpyglassIngestion, SpyglassMixin, logger
 from spyglass.utils.dj_helper_fn import accept_divergence
-from spyglass.utils.nwb_helper_fn import get_nwb_file, is_nwb_obj_type
+from spyglass.utils.nwb_helper_fn import (
+    get_image_series_timestamps,
+    get_nwb_file,
+    is_nwb_obj_type,
+)
 
 schema = dj.schema("common_task")
 
@@ -137,6 +142,14 @@ class TaskEpoch(SpyglassIngestion, dj.Imported):
     _file_config = dict()  # config for the file being ingested
     _camera_cache = dict()  # nwb_file_name -> {camera id: camera name}
     _interval_cache = dict()  # nwb_file_name -> interval names in IntervalList
+    _default_epoch = None  # (start, stop, camera names) for a file without tasks
+
+    # A file with videos but no task metadata (no processing["tasks"], no config
+    # Tasks) gets one default epoch spanning its videos, so VideoFile can still
+    # import them. See `_default_epoch_from_videos`.
+    DEFAULT_TASK_NAME = "default"
+    DEFAULT_EPOCH = 1
+    DEFAULT_INTERVAL_NAME = "01_default"
 
     _source_nwb_object_type = pynwb.core.DynamicTable
 
@@ -150,13 +163,33 @@ class TaskEpoch(SpyglassIngestion, dj.Imported):
         merges the file's own `_spyglass_config.yaml` into it. This table does
         not reload it. Kept on `self` only because `get_nwb_objects` and
         `_camera_name_map` take no config argument.
+
+        If the file has videos but no task metadata, also inserts the default
+        epoch prepared by `get_nwb_objects`.
         """
         self._camera_cache, self._interval_cache = dict(), dict()
         self._file_config = config or dict()
-        return super().insert_from_nwbfile(nwb_file_name, config, dry_run)
+        self._default_epoch = None
+        entries = super().insert_from_nwbfile(nwb_file_name, config, dry_run)
+
+        if self._default_epoch is not None:
+            default_entries = self.validate_duplicates(
+                self._default_epoch_entries(nwb_file_name)
+            )
+            if not dry_run:
+                self._run_nwbfile_insert(
+                    default_entries, nwb_file_name=nwb_file_name
+                )
+            for table, table_entries in default_entries.items():
+                entries.setdefault(table, []).extend(table_entries)
+        return entries
 
     def get_nwb_objects(self, nwb_file, nwb_file_name=None):
-        """Return the file's task tables."""
+        """Return the file's task tables.
+
+        A file without task tables (and no config Tasks) yields none; if it has
+        videos, a default epoch spanning them is prepared instead.
+        """
         tasks_mod = nwb_file.processing.get("tasks")
         task_tables = (
             [
@@ -169,13 +202,90 @@ class TaskEpoch(SpyglassIngestion, dj.Imported):
         )
 
         if not task_tables and not self._file_config.get("Tasks", []):
-            self._warn_msg(
-                f"No tasks processing module found in {nwb_file} or config\n"
+            self._default_epoch = self._default_epoch_from_videos(
+                nwb_file, nwb_file_name
             )
-            # Issue #1444: Check for orphaned ImageSeries
-            self._check_videos_without_task(nwb_file, nwb_file_name)
 
         return task_tables
+
+    def _default_epoch_from_videos(self, nwb_file, nwb_file_name):
+        """One epoch spanning every video in a file that has no task metadata.
+
+        Issue #1444: VideoFile needs a TaskEpoch, so videos in a file without
+        task metadata would otherwise not be imported. The epoch covers the
+        earliest to the latest video frame and lists all cameras in the file.
+
+        Parameters
+        ----------
+        nwb_file : pynwb.NWBFile
+            The open NWB file.
+        nwb_file_name : str
+            The file being ingested, for messages.
+
+        Returns
+        -------
+        tuple or None
+            (start, stop, camera names), or None if the file has no videos.
+        """
+        videos = [
+            obj
+            for obj in nwb_file.objects.values()
+            if isinstance(obj, pynwb.image.ImageSeries)
+        ]
+        if not videos:
+            return None
+
+        spans = [get_image_series_timestamps(video) for video in videos]
+        spans = [(ts[0], ts[len(ts) - 1]) for ts in spans if len(ts)]
+        if not spans:
+            return None
+        start = float(min(span[0] for span in spans))
+        stop = float(max(span[1] for span in spans))
+        camera_names = [
+            name for _, name in sorted(self._camera_name_map(nwb_file).items())
+        ]
+
+        logger.info(
+            f"{nwb_file_name}: no task metadata; creating default epoch "
+            f"'{self.DEFAULT_INTERVAL_NAME}' ({start:.3f}-{stop:.3f} s) for "
+            f"{len(videos)} video(s) and {len(camera_names)} camera(s)."
+        )
+        return start, stop, camera_names
+
+    def _default_epoch_entries(self, nwb_file_name) -> dict:
+        """IntervalList, Task and TaskEpoch entries for the default epoch."""
+        start, stop, camera_names = self._default_epoch
+        file_key = {"nwb_file_name": nwb_file_name}
+        return {
+            IntervalList: [
+                dict(
+                    file_key,
+                    interval_list_name=self.DEFAULT_INTERVAL_NAME,
+                    valid_times=np.array([[start, stop]]),
+                    pipeline="TaskEpoch default epoch",
+                )
+            ],
+            Task: [
+                dict(
+                    task_name=self.DEFAULT_TASK_NAME,
+                    task_description=(
+                        "Default task for files without task metadata: one "
+                        "epoch spanning the recorded videos."
+                    ),
+                )
+            ],
+            self: [
+                dict(
+                    file_key,
+                    epoch=self.DEFAULT_EPOCH,
+                    task_name=self.DEFAULT_TASK_NAME,
+                    interval_list_name=self.DEFAULT_INTERVAL_NAME,
+                    camera_names=[
+                        {"camera_name": name} for name in camera_names
+                    ],
+                )
+            ],
+        }
 
     def _camera_names(self, nwb_file_name) -> dict:
         """Return a file's camera id to name mapping, resolved once.
@@ -476,38 +586,6 @@ class TaskEpoch(SpyglassIngestion, dj.Imported):
             f"Available intervals: {session_intervals}"
         )
         return None
-
-    @staticmethod
-    def _check_videos_without_task(nwbf, nwb_file_name):
-        """Check for ImageSeries when no TaskEpoch entries exist.
-
-        Issue #1444: VideoFile requires TaskEpoch entries.
-
-        Parameters
-        ----------
-        nwbf : pynwb.NWBFile
-            Already-open NWB file object
-        nwb_file_name : str
-            Name of the NWB file for error messages
-        """
-        video_names = [
-            getattr(obj, "name", None)
-            for obj in nwbf.objects.values()
-            if isinstance(obj, pynwb.image.ImageSeries)
-        ]
-
-        if not video_names:  # No videos in NWB, nothing to warn about
-            return
-
-        logger.warning(
-            f"{nwb_file_name} TaskEpoch Import Warning (Issue #1444)\n"
-            f"Found {len(video_names)} ImageSeries without TaskEpochs:"
-            f" {video_names}\n"
-            f"VideoFile requires TaskEpoch associations to import videos.\n"
-            f"To resolve this:\n"
-            f"1. Add task information to your NWB file's processing['tasks']\n"
-            f"2. Re-run populate_all_common() after adding task data\n\n"
-        )
 
     @classmethod
     def update_entries(cls, restrict=True):

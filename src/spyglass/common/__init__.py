@@ -19,6 +19,7 @@ from spyglass.common.common_device import (
     ProbeType,
 )
 from spyglass.common.common_dio import DIOEvents
+from spyglass.common.common_events import ImportedEvents
 from spyglass.common.common_ephys import (
     LFP,
     Electrode,
@@ -85,6 +86,7 @@ __all__ = [
     "DataAcquisitionDeviceSystem",
     "DIOEvents",
     "Electrode",
+    "ImportedEvents",
     "ElectrodeGroup",
     "FirFilterParameters",
     "LFP",
